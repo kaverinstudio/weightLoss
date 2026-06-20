@@ -1,24 +1,55 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import {Stack} from 'expo-router';
+import {Provider} from 'react-redux';
+import {persistor, store} from '@/store';
+import {PersistGate} from 'redux-persist/integration/react';
+import {useEffect} from "react";
+import {AppState} from "react-native";
+import {useAppDispatch} from "@/store/hooks";
+import {checkNewDay} from "@/store/userSlice";
+import {getMsUntilNextLocalDay} from "@/utils/date";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+function DayBoundary() {
+    const dispatch = useAppDispatch();
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+    useEffect(() => {
+        let timeoutId: ReturnType<typeof setTimeout>;
+
+        const scheduleNextCheck = () => {
+            timeoutId = setTimeout(() => {
+                dispatch(checkNewDay());
+                scheduleNextCheck();
+            }, getMsUntilNextLocalDay());
+        };
+
+        dispatch(checkNewDay());
+        scheduleNextCheck();
+
+        const subscription = AppState.addEventListener('change', status => {
+            if (status === 'active') {
+                dispatch(checkNewDay());
+            }
+        });
+
+        return () => {
+            clearTimeout(timeoutId);
+            subscription.remove();
+        };
+    }, [dispatch]);
+
+    return null;
+}
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
 
-  return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
-  );
+    return (
+        <Provider store={store}>
+            <PersistGate loading={null} persistor={persistor}>
+                <DayBoundary/>
+                <Stack screenOptions={{headerShown: false}}>
+                    <Stack.Screen name="onboarding"/>
+                    <Stack.Screen name="(tabs)"/>
+                </Stack>
+            </PersistGate>
+        </Provider>
+    );
 }
